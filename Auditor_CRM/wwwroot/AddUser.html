@@ -1,0 +1,204 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>إدارة المستخدمين</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .user-list {
+            margin-top: 20px;
+        }
+
+        .delete-btn {
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3 class="text-center">🔑 إدارة المستخدمين</h3>
+        <div id="message" class="alert d-none"></div>
+        <form onsubmit="saveUser(event)">
+            <div class="mb-3">
+                <label for="username" class="form-label">👤 اسم المستخدم</label>
+                <input type="text" class="form-control" id="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">🔑 كلمة المرور</label>
+                <input type="password" class="form-control" id="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">💾 حفظ المستخدم</button>
+        </form>
+        <h4 class="text-center mt-4">📋 قائمة المستخدمين</h4>
+        <table class="table table-bordered text-center user-list">
+            <thead class="table-dark">
+                <tr>
+                    <th>🔢 ID</th>
+                    <th>👤 اسم المستخدم</th>
+                    <th>🗑️ حذف</th>
+                    <th>تغيير كلمة المرور</th>
+                </tr>
+            </thead>
+            <tbody id="user-table">
+                <!-- سيتم تحميل المستخدمين هنا -->
+            </tbody>
+        </table>
+    </div>
+    <!-- نافذة تعديل كلمة المرور -->
+    <div id="editPasswordModal" class="modal fade" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">🔑 تغيير كلمة المرور</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="password" id="newPassword" class="form-control" placeholder="🔒 كلمة المرور الجديدة">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">❌ إلغاء</button>
+                    <button type="button" class="btn btn-primary" onclick="updatePassword()">💾 حفظ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="config.js"></script>
+    <script>
+
+        const apiUrl = `${API_BASE_URL}/api/User/GetUser`; // ✅ تأكد من تعديل الرابط حسب API لديك
+
+        // 🔹 جلب قائمة المستخدمين
+        async function fetchUsers() {
+            const response = await fetch(apiUrl);
+            const users = await response.json();
+
+            const tableBody = document.getElementById("user-table");
+            tableBody.innerHTML = "";
+
+            users.forEach(user => {
+                const row = `
+                                        <tr>
+                                            <td>${user.id}</td>
+                                            <td>${user.userName}</td>
+                                            <td><button class="delete-btn" onclick="deleteUser(${user.id})">🗑️ حذف</button></td>
+                                            <td><button class="btn btn-warning btn-sm" onclick="editPassword(${user.id})">✏️ تعديل</button></td>
+                                        </tr>
+                                    `;
+                tableBody.innerHTML += row;
+            });
+        }
+
+        // 🔹 حفظ مستخدم جديد
+        async function saveUser(event) {
+            const apiUrl = `${API_BASE_URL}/api/User/register`;
+            event.preventDefault();
+
+            const username = document.getElementById("username").value;
+            const password = document.getElementById("password").value;
+
+            const response = await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showMessage(`✅ تم إضافة المستخدم "${username}" بنجاح!`, "success");
+                fetchUsers(); // 🔄 تحديث القائمة
+            } else {
+                showMessage(`❌ خطأ: ${result.message}`, "danger");
+            }
+        }
+
+        // 🔹 حذف مستخدم
+        async function deleteUser(Id) {
+            const confirmation = confirm("⚠️ هل أنت متأكد أنك تريد حذف هذا المستخدم؟");
+            if (!confirmation) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/User//delete/${Id}`, {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" }
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    fetchUsers(); // 🔄 تحديث قائمة المستخدمين بعد الحذف
+                } else {
+                    alert(`❌ خطأ: ${result.message}`);
+                }
+            } catch (error) {
+                alert(`❌ حدث خطأ أثناء الحذف: ${error.message}`);
+            }
+        }
+
+        // 🔹 عرض رسالة للمستخدم
+        function showMessage(message, type) {
+            const msgDiv = document.getElementById("message");
+            msgDiv.className = `alert alert-${type}`;
+            msgDiv.innerText = message;
+            msgDiv.classList.remove("d-none");
+
+            setTimeout(() => msgDiv.classList.add("d-none"), 3000);
+        }
+
+        // 🚀 تحميل المستخدمين عند فتح الصفحة
+        fetchUsers();
+        let selectedUserId = null; // متغير لحفظ ID المستخدم المحدد
+
+        function editPassword(userId) {
+            selectedUserId = userId; // حفظ معرف المستخدم
+            document.getElementById("newPassword").value = ""; // تفريغ الحقل
+            new bootstrap.Modal(document.getElementById("editPasswordModal")).show(); // عرض النافذة
+        }
+
+        async function updatePassword() {
+            const newPassword = document.getElementById("newPassword").value;
+            if (!newPassword) return alert("⚠️  أدخل  كلمة مرور جديدة!");
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/User/updatePassword/${selectedUserId}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ password: newPassword })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`✅ تم تحديث كلمة المرور بنجاح!`);
+                    document.querySelector(".modal .btn-close").click(); // إغلاق النافذة
+                } else {
+                    alert(`❌ خطأ: ${result.message}`);
+                }
+            } catch (error) {
+                alert(`❌ حدث خطأ: ${error.message}`);
+            }
+        }
+
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>📋 عملاء المزامنة</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+
+        .table-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+
+        .pagination-btn, .export-btn, .refresh-btn {
+            margin: 10px;
+        }
+
+        .refresh-btn {
+            background-color: #198754;
+            color: white;
+        }
+
+            .refresh-btn:hover {
+                background-color: #157347;
+            }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">📋 تقرير عملاء المزامنة</h1>
+        <div class="d-flex justify-content-between mb-3">
+            <div>
+                <button class="btn refresh-btn" onclick="fetchSyncData()">🔄 تحديث البيانات</button>
+                <button class="btn btn-primary export-btn" onclick="exportToExcel()">📁 تصدير إلى Excel</button>
+            </div>
+            <input type="text" id="searchInput" class="form-control w-50" placeholder="🔍 ابحث  ...">
+        </div>
+        <div class="table-container">
+            <table class="table table-striped table-hover text-center" id="sync-data-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>🔢 #</th>
+                        <th>👤 اسم العميل</th>
+                        <th>🔑 كود المزامنة</th>
+                        <th>📅 تأريخ البدء</th>
+                        <th>📅 تأريخ الانتهاء</th>
+                        <th>الحـالة </th>
+                        <th>تجديد </th>
+                        <th>إيقاف/ تشغيل </th>
+                    </tr>
+                </thead>
+                <tbody id="data-table"></tbody>
+            </table>
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="record-count" id="record-count">📋 عدد السجلات: 0</div>
+                <div>
+                    <button class="btn btn-secondary pagination-btn" id="prevBtn" onclick="prevPage()">⬅️ السابق</button>
+                    <span id="page-info">الصفحة 1</span>
+                    <button class="btn btn-secondary pagination-btn" id="nextBtn" onclick="nextPage()">التالي ➡️</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal لتحديد التاريخ الجديد -->
+    <div class="modal fade" id="renewModal" tabindex="-1" aria-labelledby="renewModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="renewModalLabel">🔄 تجديد تاريخ الانتهاء</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="newEndDate">📅 اختر تاريخ الانتهاء الجديد:</label>
+                    <input type="date" id="newEndDate" class="form-control">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">❌ إلغاء</button>
+                    <button type="button" class="btn btn-primary" onclick="confirmRenewal()">✅ تأكيد التجديد</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let syncData = [];
+        let filteredData = [];
+        let currentPage = 1;
+        const recordsPerPage = 20;
+        let selectedSyncCode = null;
+
+        async function fetchSyncData() {
+            const response = await fetch(`${API_BASE_URL}/api/sync/syncdata`);
+            const data = await response.json();
+            const today = new Date().setHours(0, 0, 0, 0);
+
+            // تحديث الحالة تلقائيًا بناءً على تاريخ الانتهاء
+            syncData = data.map(item => {
+                const syncEndDate = new Date(item.endDate).setHours(0, 0, 0, 0);
+
+                if (syncEndDate < today && item.status) {
+                    // ⛔ إيقاف المزامنة إذا انتهى التاريخ
+                    updateSyncStatus(item.syncCode, 0);
+                    return { ...item, status: 0 };
+                } else if (syncEndDate >= today && item.status === 0) {
+                    // ✅ تشغيل المزامنة إذا تم تمديد التاريخ
+                    updateSyncStatus(item.syncCode, 1);
+                    return { ...item, status: 1 };
+                }
+                return item;
+            }).sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+
+            filteredData = [...syncData];
+            currentPage = 1;
+            displayData();
+        }
+
+
+        function displayData() {
+            const table = document.getElementById("data-table");
+            table.innerHTML = "";
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            const endIndex = Math.min(startIndex + recordsPerPage, filteredData.length);
+
+            for (let i = startIndex; i < endIndex; i++) {
+                const item = filteredData[i];
+                const startDate = new Date(item.startDate).toLocaleDateString('en-US');
+                const endDate = new Date(item.endDate).toLocaleDateString('en-US');
+                const statusText = item.status ? "✅ نشطة" : "⛔ متوقفة";
+                const toggleButtonText = item.status ? "⛔ إيقاف" : "✅ تشغيل";
+                const toggleButtonClass = item.status ? "btn-danger" : "btn-success";
+                const endDate2 = new Date(item.endDate).toISOString(); // ✅ تحويل التاريخ لصيغة ISO
+                const row = `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${item.clientName}</td>
+                    <td>${item.syncCode}</td>
+                    <td>${startDate}</td>
+                    <td>${endDate}</td>
+                    <td>${statusText}</td>
+     <td><button class="btn btn-primary ReNew-btn" onclick="openRenewModal('${item.syncCode}')">تجديد</button></td>
+                    <td>
+                      <button class="btn ${toggleButtonClass}" onclick="toggleSyncStatus('${item.syncCode}', ${item.status}, '${endDate2}')">
+                        ${toggleButtonText}
+                    </button>
+                    </td>
+                </tr>`;
+                table.innerHTML += row;
+            }
+            document.getElementById("record-count").innerText = `📋 عدد السجلات: ${filteredData.length}`;
+            document.getElementById("page-info").innerText = `الصفحة ${currentPage} من ${Math.ceil(filteredData.length / recordsPerPage)}`;
+            document.getElementById("prevBtn").disabled = currentPage === 1;
+            document.getElementById("nextBtn").disabled = currentPage === Math.ceil(filteredData.length / recordsPerPage);
+        }
+
+
+        function nextPage() {
+            if (currentPage < Math.ceil(filteredData.length / recordsPerPage)) {
+                currentPage++;
+                displayData();
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                displayData();
+            }
+        }
+
+        function openRenewModal(syncCode) {
+           
+            selectedSyncCode = syncCode;
+            const modal = new bootstrap.Modal(document.getElementById('renewModal'));
+            modal.show();
+        }
+
+        async function confirmRenewal() {
+            const newEndDate = document.getElementById("newEndDate").value;
+            if (!newEndDate) {
+                alert("⚠️ يرجى اختيار تاريخ جديد.");
+                return;
+            }
+
+            try {
+                console.log("🔍 syncCode المستخدم:", selectedSyncCode);
+
+                const formattedEndDate = newEndDate; // التاريخ بتنسيق "YYYY-MM-DD"
+
+                // إرسال البيانات كـ باراميتر في الـ URL
+                const response = await fetch(`${API_BASE_URL}/api/sync/updateEndDateSync?syncCode=${encodeURIComponent(selectedSyncCode)}&updatedData=${encodeURIComponent(formattedEndDate)}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                const contentType = response.headers.get("content-type");
+                let result = {};
+
+                if (contentType && contentType.includes("application/json")) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    result.message = text;
+                }
+
+                console.log("استجابة السيرفر:", result);
+
+                if (response.ok) {
+                    alert(result.message || "✅ تم التجديد بنجاح.");
+
+                    // ✅ بعد التجديد، تحقق مما إذا كان يجب تشغيل المزامنة تلقائيًا
+                    const today = new Date().setHours(0, 0, 0, 0);
+                    const newEndDateObj = new Date(newEndDate).setHours(0, 0, 0, 0);
+
+                    if (newEndDateObj >= today) {
+                        await updateSyncStatus(selectedSyncCode, 1);  // 🔄 تشغيل المزامنة تلقائيًا
+                    }
+
+                    fetchSyncData();
+                    bootstrap.Modal.getInstance(document.getElementById('renewModal')).hide();
+                } else {
+                    alert(`❌ خطأ: ${result.message || "حدث خطأ غير متوقع."}`);
+                }
+            } catch (error) {
+                alert(`❌ خطأ في الاتصال بالخادم: ${error.message}`);
+            }
+        }
+        async function toggleSyncStatus(syncCode, currentStatus, endDate) {
+            const action = currentStatus ? "إيقاف" : "تشغيل";
+            const confirmation = confirm(`⚠️ هل أنت متأكد من ${action} المزامنة؟`);
+
+            if (!confirmation) {
+                return; // ⛔️ إذا لم يؤكد المستخدم، لا يتم تنفيذ أي شيء
+            }
+
+            let newStatus = currentStatus ? 0 : 1; // إذا كانت نشطة (1) يتم إيقافها (0) والعكس
+
+            // تحويل القيمة إلى Boolean إذا كانت نصًا
+            newStatus = (newStatus === 1);  // تحويل 1 إلى true و 0 إلى false
+
+            const now = new Date().setHours(0, 0, 0, 0); // تجاهل الوقت للمقارنة بشكل أفضل
+            const syncEndDate = new Date(endDate).setHours(0, 0, 0, 0);
+
+            // فحص اعتمادًا على حالة المزامنة والتاريخ
+            if (newStatus && syncEndDate < now) {
+                alert("⚠️ لا يمكن تشغيل المزامنة لأن تاريخ الانتهاء أقل من تاريخ اليوم. يرجى تجديد التاريخ أولاً.");
+                return;
+            } else if (!newStatus && syncEndDate < now) {
+                alert("⚠️ لا يمكن إيقاف المزامنة لأن تاريخ الانتهاء قد انتهى بالفعل. يرجى تجديد التاريخ أولاً.");
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/sync/ToggleSync?syncCode=${encodeURIComponent(syncCode)}&syncStatus=${encodeURIComponent(newStatus)}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert(`❌ خطأ في الاتصال بالخادم: ${errorText}`);
+                    return;
+                }
+
+                const contentType = response.headers.get("Content-Type");
+                let result = {};
+                if (contentType && contentType.includes("application/json")) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    result.message = text;
+                }
+
+                if (response.ok) {
+                    alert(`✅ تم ${action} المزامنة بنجاح.`);
+                    fetchSyncData(); // 🔄 تحديث البيانات بعد التنفيذ
+                } else {
+                    let errorMsg = "حدث خطأ غير متوقع.";
+                    if (result.message) {
+                        errorMsg = result.message;
+                    }
+
+                    alert(`❌ خطأ: ${errorMsg}`);
+                }
+            } catch (error) {
+                alert(`❌ خطأ في الاتصال بالخادم: ${error.message}`);
+            }
+        }
+
+
+
+
+
+        function exportToExcel() {
+            const table = document.getElementById("sync-data-table");
+            const wb = XLSX.utils.table_to_book(table, { sheet: "بيانات المزامنة" });
+            XLSX.writeFile(wb, "sync_data.xlsx");
+        }
+
+        document.getElementById("searchInput").addEventListener("input", function () {
+            const searchText = this.value.toLowerCase();
+            filteredData = syncData.filter(item =>
+                item.clientName.toLowerCase().includes(searchText) ||
+                item.syncCode.toLowerCase().includes(searchText) ||
+                new Date(item.startDate).toLocaleDateString('en-US').includes(searchText) ||
+                new Date(item.endDate).toLocaleDateString('en-US').includes(searchText)
+            );
+            currentPage = 1;
+            displayData();
+        });
+        async function updateSyncStatus(syncCode, newStatus) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/sync/ToggleSync/${syncCode}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                if (!response.ok) {
+                    console.error(`❌ فشل تحديث المزامنة ${syncCode}`);
+                }
+            } catch (error) {
+                console.error(`❌ خطأ في الاتصال بالخادم: ${error.message}`);
+            }
+        }
+
+
+        fetchSyncData();
+    </script>
+    <script src="config.js"></script>
+</body>
+</html>
