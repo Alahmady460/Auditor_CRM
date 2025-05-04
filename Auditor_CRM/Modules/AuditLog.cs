@@ -1,9 +1,13 @@
 ﻿using System;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Auditor_ManagerOnline.Models
 {
+    [Table("auditLog", Schema = "crmdb")]
     public class AuditLog
     {
+        [Key]
         public int Id { get; set; }
         public string UserId { get; set; } // ID المستخدم (إذا كان مسجلاً)
         public string Action { get; set; } // العملية التي تمت (إضافة، تعديل، حذف)

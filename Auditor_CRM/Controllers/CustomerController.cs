@@ -80,7 +80,7 @@ public class CustomerController : ControllerBase
         return Ok(new { message = "✅ تم الحفظ بنجاح.", data });
     }
     [HttpPost("Zatca")]
-    public async Task<IActionResult> UpsertCustZatc([FromBody] CustZatca data)
+    public async Task<IActionResult> UpsertCustZatc([FromBody] custzatca data)
     {
         // تحقق من البيانات المدخلة
         if (data == null || string.IsNullOrEmpty(data.ClientName))
@@ -176,6 +176,15 @@ public class CustomerController : ControllerBase
             return StatusCode(500, new { message = "❌ خطأ في إرسال البريد الإلكتروني: " + ex.Message });
         }
     }
+    [HttpGet("custzatca")]
+    public async Task<IActionResult> Getcustzatca()
+    {
+        var clientzatca = await _context.custzatca
+            .ToListAsync();
+
+        return Ok(clientzatca);
+    }
+
 
     public class UpdateEndDateRequest
     {

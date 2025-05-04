@@ -1,13 +1,12 @@
 ﻿using Auditor_CRM.Services;
 using Auditor_ManagerOnline.Models;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 namespace Auditor_CRM.Controllers
 {
     [Route("api/User")]
@@ -27,18 +26,28 @@ namespace Auditor_CRM.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest loginRequest)
         {
+            try
+            {
+
+      
             if (loginRequest == null || string.IsNullOrEmpty(loginRequest.UserName) || string.IsNullOrEmpty(loginRequest.Password))
                 return BadRequest("❌ بيانات تسجيل الدخول غير صحيحة.");
 
             // 🔎 البحث عن المستخدم في قاعدة البيانات
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserName == loginRequest.UserName);
             if (user == null || !BCrypt.Net.BCrypt.Verify(loginRequest.Password, user.PasswordHash))
-                return Unauthorized();
+                return BadRequest("❌ بيانات تسجيل الدخول غير صحيحة.");
 
-            // 🔥 إنشاء التوكن
-            var token = GenerateJwtToken(user);
+                // 🔥 إنشاء التوكن
+                var token = GenerateJwtToken(user);
 
             return Ok(new { token, userName = user.UserName, role = user.Role });
+            }
+            catch (Exception ex)
+            {
+
+                return BadRequest("❌ بيانات تسجيل الدخول غير صحيحة." + ex.Message);
+            }
         }
 
         // ✅ إنشاء مستخدم جديد

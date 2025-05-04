@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Auditor_ManagerOnline.Models
 {
+    [Table("users", Schema = "crmdb")]
     public class UserModel
     {
         [Key]

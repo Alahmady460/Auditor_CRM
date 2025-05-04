@@ -1,5 +1,10 @@
-﻿public class Customers
+﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("customers", Schema = "crmdb")]
+public class Customers
 {
+    [Key]
     public int Id { get; set; }
     public string CompanyName { get; set; }
     public DateTime LastConnect { get; set; }  // ✅ تأكد أنه DateTime
